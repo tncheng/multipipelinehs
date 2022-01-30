@@ -163,17 +163,21 @@ func (r *Replica) handleTxn(m message.Transaction) {
 /* Processors */
 
 func (r *Replica) processCommittedBlock(block *blockchain.Block) {
-	if block.Proposer == r.ID() {
-		for _, txn := range block.Payload {
-			// only record the delay of transactions from the local memory pool
-			delay := time.Since(txn.Timestamp)
-			r.totalDelay += delay
-			r.latencyNo++
-		}
+	var latencys time.Duration
+	// if block.Proposer == r.ID() {
+	for _, txn := range block.Payload {
+		// only record the delay of transactions from the local memory pool
+		delay := time.Since(txn.Timestamp)
+		latencys += delay
+		r.totalDelay += delay
+		r.latencyNo++
 	}
+
+	// }
 	r.committedNo++
 	r.totalCommittedTx += len(block.Payload)
-	log.Infof("[%v] the block is committed, No. of transactions: %v, view: %v, seq: %v, current view: %v, id: %x", r.ID(), len(block.Payload), block.View, block.Seq, r.pm.GetCurView(), block.ID)
+
+	log.Infof("[%v] the block is committed, No. of transactions: %v, view: %v, seq: %v, tx average latency: %.5f ms,current view: %v, id: %x", r.ID(), len(block.Payload), block.View, block.Seq, float64(latencys.Milliseconds())/float64(len(block.Payload)), r.pm.GetCurView(), block.ID)
 }
 
 func (r *Replica) processForkedBlock(block *blockchain.Block) {
