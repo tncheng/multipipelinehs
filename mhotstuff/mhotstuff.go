@@ -343,7 +343,7 @@ func (mhs *MHotStuff) forkChoice(flag int) *blockchain.QC {
 
 func (mhs *MHotStuff) processTC(tc *blockchain.TC) {
 	log.Debugf("[%v] processing tc, view:%v", mhs.ID(), tc.View)
-	if types.View(tc.View) < mhs.pm.GetCurView() {
+	if tc.View < mhs.pm.GetCurView() {
 		return
 	}
 	mhs.pm.AdvanceView(tc.View, tc.Seq, types.TimeoutF)
