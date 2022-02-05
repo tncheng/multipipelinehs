@@ -207,6 +207,7 @@ func (r *Replica) proposeBlock(view types.NewViewType) {
 	createDuration := createEnd.Sub(createStart)
 	block.Timestamp = time.Now()
 	r.totalCreateDuration += createDuration
+	//TODO:check the order of self propose and broadcast
 	r.eventChan <- *block
 	r.Broadcast(block)
 	// r.Safety.ProcessBlock(block)
