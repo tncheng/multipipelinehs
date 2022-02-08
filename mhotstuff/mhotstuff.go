@@ -87,9 +87,7 @@ func (mhs *MHotStuff) ProcessBlock(block *blockchain.Block) error {
 		log.Debugf("[%v] the block is buffered, id: %x", mhs.ID(), block.ID)
 		return nil
 	}
-	if block.QC != nil {
-		mhs.updateHighQC(block.QC)
-	} else {
+	if block.QC == nil {
 		return fmt.Errorf("the block should contain a QC")
 	}
 	// does not have to process the QC if the replica is the proposer
@@ -509,7 +507,7 @@ func (mhs *MHotStuff) updatePreferredView(qc *blockchain.QC) error {
 
 func (mhs *MHotStuff) updatePreferredSeq(qc *blockchain.QC) error {
 	// update 2-chain block if there are two adjacent block, such that: b0 <- b1
-	if qc.Seq <= 4 {
+	if qc.Seq < 4 {
 		return nil
 	}
 	b1, err := mhs.bc.GetBlockByID(qc.BlockID)
