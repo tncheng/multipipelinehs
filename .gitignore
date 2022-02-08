@@ -17,3 +17,4 @@
 *.log
 plot
 bin/server
+bin/client
