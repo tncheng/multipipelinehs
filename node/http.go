@@ -30,7 +30,7 @@ var ppFree = sync.Pool{
 
 func (n *node) SimulateTx() {
 	// Transaction {cmd=Put{key=0 value= id= cid=0 nid=1}
-	time.Sleep(10 * time.Second)
+	time.Sleep(5 * time.Second)
 	base := string(n.id)
 	count := 0
 	for {

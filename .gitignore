@@ -15,6 +15,5 @@
 # vendor/
 
 *.log
-server
 plot
 bin/server

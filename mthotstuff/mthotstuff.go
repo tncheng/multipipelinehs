@@ -25,6 +25,7 @@ type MTchs struct {
 	preferredView   types.View
 	lastVotedSeq    types.Seq
 	preferredSeq    types.Seq
+	secPreferredSeq types.Seq
 	bc              *blockchain.BlockChain
 	committedBlocks chan *blockchain.Block
 	forkedBlocks    chan *blockchain.Block
@@ -38,6 +39,7 @@ type MTchs struct {
 	highTC          *blockchain.TC
 	secHighTC       *blockchain.TC
 	highBlock       *blockchain.Block
+	voteType        int
 
 	mu sync.Mutex
 }
@@ -66,6 +68,7 @@ func NewMTchs(
 	mth.forkedBlocks = forkedBlocks
 	mth.selfVote = selfVote
 	mth.selfTmo = selfTmo
+	mth.voteType = types.NoTimeout
 	mth.proposeChan = make(chan types.SignalV, 4)
 	return mth
 }
@@ -88,9 +91,7 @@ func (mth *MTchs) ProcessBlock(block *blockchain.Block) error {
 		log.Debugf("[%v] the block is buffered, view: %v, current view is: %v, id: %x", mth.ID(), block.View, curView, block.ID)
 		return nil
 	}
-	if block.QC != nil {
-		mth.updateHighQC(block.QC)
-	} else {
+	if block.QC == nil {
 		return fmt.Errorf("the block should contain a QC")
 	}
 	// does not have to process the QC if the replica is the proposer
@@ -98,7 +99,13 @@ func (mth *MTchs) ProcessBlock(block *blockchain.Block) error {
 		mth.processCertificate(block.QC)
 	}
 
-	asCollector := block.TC == nil
+	var asCollector bool
+	if block.TC == nil {
+		mth.voteType = types.NoTimeout
+		asCollector = true
+	} else {
+		asCollector = false
+	}
 	if !asCollector && block.Proposer != mth.ID() {
 		var maxView types.View
 		if block.TCs[1].View > block.TCs[0].View {
@@ -111,8 +118,10 @@ func (mth *MTchs) ProcessBlock(block *blockchain.Block) error {
 			switch block.TC.View {
 			case maxView - 1:
 				mth.pm.AdvanceView(block.TC.View, block.TC.Seq, types.TimeoutF)
+				mth.voteType = types.TimeoutF
 			case maxView:
 				mth.pm.AdvanceView(block.TC.View, block.TC.Seq, types.TimeoutS)
+				mth.voteType = types.TimeoutS
 				mth.updateHighTC(nil)
 				mth.updateHighTC(nil)
 			}
@@ -132,6 +141,9 @@ func (mth *MTchs) ProcessBlock(block *blockchain.Block) error {
 	// update highblock if the block's signature is valid
 	mth.updateHighBlock(block)
 
+	// get context of current state
+	ctx := types.StateContext{VoteType: mth.voteType, PreferredSeq: mth.preferredSeq, SecPreferredSeq: mth.secPreferredSeq, LastVotedSeq: mth.lastVotedSeq}
+
 	// find next leader to collect vote for previous block
 	nextView := curView + 1
 	if mth.IsLeader(mth.ID(), nextView) {
@@ -148,6 +160,7 @@ func (mth *MTchs) ProcessBlock(block *blockchain.Block) error {
 			if curView <= maxTC.View {
 				log.Debugf("[%v] tc advance view: %v", mth.ID(), maxTC.View)
 				mth.pm.AdvanceView(maxTC.View, maxTC.Seq, types.TimeoutS)
+				mth.voteType = types.TimeoutS
 				mth.updateHighTC(block.TCs[0])
 				mth.updateHighTC(block.TCs[1])
 			} else {
@@ -185,7 +198,7 @@ func (mth *MTchs) ProcessBlock(block *blockchain.Block) error {
 		delete(mth.bufferedQCs, block.ID)
 	}
 
-	shouldVote, err := mth.votingRule(block)
+	shouldVote, err := mth.votingRule(block, ctx)
 	if err != nil {
 		log.Errorf("cannot decide whether to vote the block, %w", err)
 		return err
@@ -196,7 +209,7 @@ func (mth *MTchs) ProcessBlock(block *blockchain.Block) error {
 	}
 	vote := blockchain.MakeVote(block.View, block.Seq, mth.ID(), block.ID)
 	// vote to the next leader
-	voteAggregator := mth.FindLeaderFor(block.View + 1)
+	voteAggregator := mth.FindLeaderFor(block.View + 2)
 	log.Debugf("[%v] knows the leader of view: %v is: %v", mth.ID(), block.View+2, voteAggregator)
 	if voteAggregator == mth.ID() {
 		log.Debugf("[%v] vote is sent to itself, id: %x", mth.ID(), vote.BlockID)
@@ -205,7 +218,6 @@ func (mth *MTchs) ProcessBlock(block *blockchain.Block) error {
 		log.Debugf("[%v] vote is sent to %v, id: %x", mth.ID(), voteAggregator, vote.BlockID)
 		mth.Send(voteAggregator, vote)
 	}
-	log.Debugf("[%v] vote is sent, id: %x", mth.ID(), vote.BlockID)
 
 	b, ok := mth.bufferedBlocks[block.View]
 	if ok {
@@ -233,6 +245,7 @@ func (mth *MTchs) ProcessVote(vote *blockchain.Vote) {
 		log.Debugf("[%v] not sufficient votes to build a QC, block id: %x", mth.ID(), vote.BlockID)
 		return
 	}
+	log.Debugf("[%v] wait signal for process qc view:%v", mth.ID(), qc.View)
 	qc.Leader = mth.ID()
 
 	for v := range mth.proposeChan {
@@ -241,6 +254,7 @@ func (mth *MTchs) ProcessVote(vote *blockchain.Vote) {
 		} else {
 			if v.View > qc.View {
 				log.Debugf("[%v] drop qc for %v", mth.ID(), qc.View)
+				return
 			} else {
 				log.Debugf("[%v] skip invalid drop signal for view %v", mth.ID(), qc.View)
 				continue
@@ -250,9 +264,12 @@ func (mth *MTchs) ProcessVote(vote *blockchain.Vote) {
 
 	_, err := mth.bc.GetBlockByID(qc.BlockID)
 	if err != nil {
-		mth.bufferedQCs[qc.BlockID] = qc
-		return
+		if qc.View != 1 {
+			mth.bufferedQCs[qc.BlockID] = qc
+			return
+		}
 	}
+	log.Debugf("[%v] got signal", mth.ID())
 	mth.processCertificate(qc)
 }
 
@@ -330,6 +347,7 @@ func (mth *MTchs) processTC(tc *blockchain.TC) {
 		return
 	}
 	mth.pm.AdvanceView(tc.View, tc.Seq, types.TimeoutF)
+	mth.voteType = types.TimeoutF
 }
 
 func (mth *MTchs) GetChainStatus() string {
@@ -394,7 +412,6 @@ func (mth *MTchs) GetHighBlock() *blockchain.Block {
 }
 
 func (mth *MTchs) processCertificate(qc *blockchain.QC) {
-	log.Debugf("[%v] is processing a QC, block id: %x", mth.ID(), qc.BlockID)
 	if qc.View < mth.pm.GetCurView() {
 		return
 	}
@@ -409,6 +426,7 @@ func (mth *MTchs) processCertificate(qc *blockchain.QC) {
 		mth.pm.AdvanceView(qc.View, qc.Seq, types.NoTimeout)
 		return
 	}
+	log.Debugf("[%v] is processing a QC,qc.view:%d, block id: %x", mth.ID(), qc.View, qc.BlockID)
 	err := mth.updatePreferredSeq(qc)
 	if err != nil {
 		mth.bufferedQCs[qc.BlockID] = qc
@@ -420,7 +438,7 @@ func (mth *MTchs) processCertificate(qc *blockchain.QC) {
 }
 
 // TODO:voterule check
-func (mth *MTchs) votingRule(block *blockchain.Block) (bool, error) {
+func (mth *MTchs) votingRule(block *blockchain.Block, ctx types.StateContext) (bool, error) {
 	if block.View < 3 {
 		return true, nil
 	}
@@ -428,7 +446,16 @@ func (mth *MTchs) votingRule(block *blockchain.Block) (bool, error) {
 	if err != nil {
 		return false, fmt.Errorf("cannot vote for block: %w", err)
 	}
-	if (block.Seq <= mth.lastVotedSeq) || (parentBlock.Seq < mth.preferredSeq) {
+	log.Debugf("[%v] vote type is:%v", mth.ID(), ctx.VoteType)
+	safetyRule1 := block.Seq <= ctx.LastVotedSeq
+	safetyRule2 := false
+	if ctx.VoteType == types.NoTimeout || ctx.VoteType == types.TimeoutS {
+		safetyRule2 = parentBlock.Seq < ctx.PreferredSeq
+	} else {
+		safetyRule2 = parentBlock.Seq < ctx.SecPreferredSeq
+	}
+	if safetyRule1 || safetyRule2 {
+		log.Debugf("block.seq:%v,lastVotedSeq:%v,parentBlock.seq:%v,secPreferredSeq:%v,preferredSeq:%v", block.Seq, ctx.LastVotedSeq, parentBlock.Seq, ctx.SecPreferredSeq, ctx.PreferredSeq)
 		return false, nil
 	}
 	return true, nil
@@ -472,7 +499,7 @@ func (mth *MTchs) updatePreferredView(qc *blockchain.QC) error {
 
 func (mth *MTchs) updatePreferredSeq(qc *blockchain.QC) error {
 	// update 1-chain block if there are two adjacent block, such that: b0
-	if qc.Seq <= 2 {
+	if qc.Seq < 2 {
 		return nil
 	}
 	_, err := mth.bc.GetBlockByID(qc.BlockID)
@@ -480,6 +507,7 @@ func (mth *MTchs) updatePreferredSeq(qc *blockchain.QC) error {
 		return fmt.Errorf("cannot update preferred seq: %w", err)
 	}
 	if qc.Seq > mth.preferredSeq {
+		mth.secPreferredSeq = mth.preferredSeq
 		mth.preferredSeq = qc.Seq
 	}
 	return nil
