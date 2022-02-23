@@ -1,7 +1,10 @@
+from cmath import nan
 import os
 import time
 
 import json
+
+from numpy import nan_to_num
 
 stat={}
 
@@ -16,14 +19,19 @@ for f in logs:
     fp=open(f)
     txs=0
     timelist=[]
+    latencys=0.0
+    blocks=0
     for line in iter(fp):
         if "committed" in line:
             a=line.split(' ')[1]+'-'+line.split(' ')[2].split('.')[0]
-            # print(a)
+            latencys+=nan_to_num(float(line.split(' ')[20]))
             st=time.mktime(time.strptime(a,"%Y/%m/%d-%H:%M:%S"))
             timelist.append(st)
             commitedtx=line.split(':')[5][:-6]
             txs+=int(commitedtx)
+            if int(commitedtx)==0:
+                continue
+            blocks+=1
     if len(timelist)<1:
         print("there is no valid log")
         break
@@ -31,6 +39,7 @@ for f in logs:
     stat['running time(s)']=duration
     stat['txs']=txs
     stat['tps(tx/s)']=int(txs/duration)
+    stat['latency(ms)']=latencys/blocks
     print(json.dumps( stat,indent=2))
 
     currentConfig=None

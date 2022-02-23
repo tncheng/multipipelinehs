@@ -15,6 +15,7 @@
 # vendor/
 
 *.log
+result_*.json
 plot
 bin/server
 bin/client
