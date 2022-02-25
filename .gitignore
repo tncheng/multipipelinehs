@@ -18,3 +18,5 @@
 plot
 bin/server
 bin/client
+deploy
+result

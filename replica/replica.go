@@ -63,6 +63,7 @@ type Replica struct {
 
 // NewReplica creates a new replica instance
 func NewReplica(id identity.NodeID, alg string, isByz bool, txInterval int) *Replica {
+	log.Infof("consensus algorithm: %v", alg)
 	r := new(Replica)
 	r.Node = node.NewNode(id, isByz, txInterval)
 	if isByz {
@@ -154,6 +155,8 @@ func (r *Replica) handleQuery(m message.Query) {
 }
 
 func (r *Replica) handleTxn(m message.Transaction) {
+	// add timestamp to tx
+	m.Timestamp = time.Now()
 	r.pd.AddTxn(&m)
 	r.startSignal()
 	// the first leader kicks off the protocol

@@ -36,8 +36,8 @@ func (n *node) SimulateTx() {
 	for {
 		time.Sleep(time.Duration(n.txInterval) * time.Microsecond)
 
-		now := time.Now()
-		tx := message.Transaction{Command: db.Command{Key: db.Key(count)}, ID: base + strconv.Itoa(count), Timestamp: now}
+		// now := time.Now()
+		tx := message.Transaction{Command: db.Command{Key: db.Key(count)}, ID: base + strconv.Itoa(count)}
 		count++
 		n.TxChan <- tx
 
