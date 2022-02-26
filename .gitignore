@@ -19,4 +19,5 @@ plot
 bin/server
 bin/client
 deploy
-result
+result*
+*.csv
