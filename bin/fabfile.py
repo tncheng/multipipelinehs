@@ -18,26 +18,25 @@ def local(ctx):
     print("local")
 
 
-def run(host,user,port,id,work_dir,start,timeout):
+def run(host,user,port,id,work_dir,start,timeout,alg):
     conn=Connection(host=host,user=user,port=port)
     deadline=150
-    pid=0
     with conn.cd(work_dir):
         try:
-            conn.run('pkill hotstuff')
+            conn.run('tmux kill-session',hide=True)
         except Exception as e:
             print("nothing killed on {}".format(id))        
         while 1:
-            time.sleep(0.001)
+            time.sleep(0.0001)
             if time.time()-start>timeout:
-                info=conn.run('./run.sh {} && sleep 1'.format(id),hide=True)
-                pid=int(info.stdout)
-                print('running process {}'.format(pid))
+                cmd=f'./hotstuff -id {id} -log_dir=./ -log_level=info -algorithm={alg}'
+                conn.run(f'tmux new -d -s hotstuff "{cmd}"')
+                print(f'running {id}')
                 break
     time.sleep(deadline)
     with conn.cd(work_dir):
         try: 
-            conn.run('kill {}'.format(pid))
+            conn.run('tmux kill-session')
         except Exception as e:
             print("no process to kill")
     print('worker {} over'.format(id))
@@ -49,8 +48,6 @@ def prepare(dir,alg):
     subprocess.run('mv hotstuff ./{}'.format(dir),shell=True)
     utils.UpdateConfig(dir)
     subprocess.run('cp ips_remote.txt ./{}/ips.txt'.format(dir),shell=True)
-    subprocess.run("echo '#!/usr/bin/env bash\nnohup ./hotstuff -id $1 -log_dir=./ -log_level=info -algorithm={} >& /dev/null < /dev/null & echo $!' > ./{}/run.sh".format(alg,dir),shell=True)
-    subprocess.run('chmod +x ./{}/run.sh'.format(dir),shell=True)
 
 
 
@@ -90,7 +87,7 @@ def remote(ctx):
     tm=10
     pss=[]
     for id,p in enumerate(nodes):
-        instance=Process(target=run,args=(host_ip,user,p,id+1,work_path,start,tm))
+        instance=Process(target=run,args=(host_ip,user,p,id+1,work_path,start,tm,alg))
         pss.append(instance)
         instance.start()
     for p in pss:
@@ -109,5 +106,4 @@ def remote(ctx):
                 if "log" in log:
                     conn.get("{}/{}".format(work_path,log),"./{}/{}".format(result_dir,log))
                     utils.Analyze(source_dir,result_dir,log)
-                    break
-       
+                    break       

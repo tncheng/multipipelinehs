@@ -21,4 +21,5 @@ bin/server
 bin/client
 debug
 deploy
-result
+result*
+*.csv
