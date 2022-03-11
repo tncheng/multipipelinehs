@@ -15,6 +15,7 @@ import (
 	"github.com/tncheng/multipipelinehs/mempool"
 	"github.com/tncheng/multipipelinehs/message"
 	"github.com/tncheng/multipipelinehs/mhotstuff"
+	"github.com/tncheng/multipipelinehs/mthotstuff"
 	"github.com/tncheng/multipipelinehs/node"
 	"github.com/tncheng/multipipelinehs/pacemaker"
 	"github.com/tncheng/multipipelinehs/types"
@@ -97,6 +98,8 @@ func NewReplica(id identity.NodeID, alg string, isByz bool, txInterval int) *Rep
 	switch alg {
 	case "mhotstuff":
 		r.Safety = mhotstuff.NewMHotStuff(r.Node, r.pm, r.Election, r.committedBlocks, r.forkedBlocks, r.eventChan, r.dualEventChan)
+	case "mthotstuff":
+		r.Safety = mthotstuff.NewMTchs(r.Node, r.pm, r.Election, r.committedBlocks, r.forkedBlocks, r.eventChan, r.dualEventChan)
 	default:
 		r.Safety = mhotstuff.NewMHotStuff(r.Node, r.pm, r.Election, r.committedBlocks, r.forkedBlocks, r.eventChan, r.dualEventChan)
 	}

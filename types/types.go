@@ -24,3 +24,9 @@ type SignalV struct {
 	Ope  int
 	View View
 }
+type StateContext struct {
+	VoteType        int
+	PreferredSeq    Seq
+	SecPreferredSeq Seq
+	LastVotedSeq    Seq
+}
