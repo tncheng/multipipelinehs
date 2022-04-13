@@ -1,5 +1,7 @@
 {
-    "txinterval":10,
-    "duplicate":2,
+    "bsize": 400,
+    "memsize": 5120,
+    "txinterval": 5,
+    "duplicate": 2,
     "byzNo": 0
 }

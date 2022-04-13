@@ -101,7 +101,7 @@ def _prepare(dir,result_dir):
 def remote(ctx,N,alg):
     N=int(N)
     user="chengtaining"
-    host_ip="113.55.112.201"
+    host_ip="222.19.236.158"
     interner_ports={
         "192.168.1.11":6011,
         "192.168.1.12":6012,
@@ -124,8 +124,11 @@ def remote(ctx,N,alg):
     print("prepare deploy file")
     run_name=_prepare(source_dir,result_dir)
 
+    phynodes=nodes
     # deploy to remote
-    servers=[Connection(host=host_ip,user=user,port=p) for p in nodes]
+    if len(nodes)>len(interner_ports):
+        phynodes=list(interner_ports.values())
+    servers=[Connection(host=host_ip,user=user,port=p) for p in phynodes]
     deployG=ThreadingGroup.from_connections(servers)
     # clean deploy
     cmd='rm -rf {}'.format(work_path)
@@ -137,7 +140,7 @@ def remote(ctx,N,alg):
     
     for f in os.listdir(source_dir):
         deployG.put("{}/{}".format(source_dir,f),work_path)
-    deployG.close()
+    
 
     # run benchmark
     print("start benchmark")
@@ -161,5 +164,10 @@ def remote(ctx,N,alg):
             for log in info.stdout.split('\n'):
                 if "log" in log:
                     conn.get("{}/{}".format(work_path,log),"./{}/{}".format(f'{result_dir}/{run_name}',log))
+    
+    # clean deploy
+    cmd='rm -rf {}'.format(work_path)
+    deployG.run(cmd,hide=True)
+    deployG.close()
     
     _analaze(source_dir,f'{result_dir}/{run_name}',N)
