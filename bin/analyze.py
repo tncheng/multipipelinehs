@@ -1,50 +1,28 @@
 
 import time
-
-import json
-
 from numpy import nan_to_num
 from numpy import mean
+import json
+import os
 
-def update_config(dir):
-    with open("update.json",'r') as uc:
-        config=json.load(uc)
-    with open("config.json",'r') as oc:
-        origin_config=json.load(oc)
-    
-    for k,v in config.items():
-        origin_config[k]=v
-    with open("{}/config.json".format(dir),'w') as wf:
-        json.dump(origin_config,wf,indent=4)
+from yaml import load
 
 
-def generate_ip_table(int_ips,mode,N):
-    if mode=='remote':
-        ip_tables=[]
-        if N>len(int_ips):
-            raise Exception(f'size of instances error, {N},{len(int_ips)}')
-        ip_tables=[f'{ip}\n' for ip in int_ips[:N]]
-        with open("ips.txt",'w') as wf:
-            wf.writelines(ip_tables)
-    else:
-        with open("ips.txt",'w') as wf:
-            wf.writelines([f'127.0.0.1\n' for _ in range(N)])
-        
-
-
-
-        
-
-
-def Analyze(config_dir,result_dir,log,N):
+def load_log(work_dir):
     txs=0
-    fp=open("{}/{}".format(result_dir, log))
+    logf=''
+    for f in os.listdir(work_dir):
+        if '.log' in f:
+            logf=f
+    fp=open(f'{work_dir}/{logf}')
     timelist=[]
     latencys=[]
     blocks=0
     stat={}
     alg=""
     id=''
+    with open('ips.txt','r') as f:
+        N=len(f.readlines())
     for line in iter(fp):
         if "consensus" in line:
             id=line.split()[-3]
@@ -71,6 +49,13 @@ def Analyze(config_dir,result_dir,log,N):
     stat['tps(tx/s)']=int(txs/duration)
     stat['average latency(ms)']=mean(latencys)
     stat['replicas']=N
-    print(json.dumps( stat,indent=2))
+    print(json.dumps(stat,indent=2))
     stat['latencys']=str(latencys)
-    return stat
+    with open(f'{work_dir}/config.json','r') as cf:
+        config=json.load(cf)
+    config['result']=stat
+    with open(f'{work_dir}/result_{id}.json','w') as wf:
+        json.dump(config,wf,indent=4)
+
+load_log('./')
+    
