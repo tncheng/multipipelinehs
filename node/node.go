@@ -37,6 +37,7 @@ type node struct {
 	server      *http.Server
 	isByz       bool
 	txInterval  int
+	payloadSize int
 	totalTxn    int
 
 	sync.RWMutex
@@ -44,12 +45,13 @@ type node struct {
 }
 
 // NewNode creates a new Node object from configuration
-func NewNode(id identity.NodeID, isByz bool, txInterval int) Node {
+func NewNode(id identity.NodeID, isByz bool, txInterval int, payloadSize int) Node {
 	return &node{
-		id:         id,
-		isByz:      isByz,
-		txInterval: txInterval,
-		Socket:     socket.NewSocket(id, config.Configuration.Addrs),
+		id:          id,
+		isByz:       isByz,
+		txInterval:  txInterval,
+		payloadSize: payloadSize,
+		Socket:      socket.NewSocket(id, config.Configuration.Addrs),
 		//Database:    NewDatabase(),
 		MessageChan: make(chan interface{}, config.Configuration.ChanBufferSize),
 		TxChan:      make(chan interface{}, config.Configuration.ChanBufferSize),

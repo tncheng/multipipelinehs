@@ -64,7 +64,7 @@ type Replica struct {
 // NewReplica creates a new replica instance
 func NewReplica(id identity.NodeID, alg string, isByz bool, txInterval int) *Replica {
 	r := new(Replica)
-	r.Node = node.NewNode(id, isByz, txInterval)
+	r.Node = node.NewNode(id, isByz, txInterval,config.GetConfig().PayloadSize)
 	log.Infof("node id: %v consensus algorithm:%v", r.ID(), alg)
 	if isByz {
 		log.Infof("[%v] is Byzantine", r.ID())
