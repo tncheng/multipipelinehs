@@ -17,12 +17,12 @@ var algorithm = flag.String("algorithm", "mhotstuff", "BFT consensus algorithm")
 var id = flag.String("id", "", "NodeID of the node")
 var simulation = flag.Bool("sim", false, "simulation mode")
 
-func initReplica(id identity.NodeID, isByz bool, txInterval int) {
+func initReplica(id identity.NodeID, isByz bool) {
 	log.Infof("node %v starting...", id)
 	if isByz {
 		log.Infof("node %v is Byzantine", id)
 	}
-	r := replica.NewReplica(id, *algorithm, isByz, txInterval)
+	r := replica.NewReplica(id, *algorithm, isByz)
 	r.Start()
 }
 
@@ -42,7 +42,7 @@ func main() {
 			// if id.Node() <= config.GetConfig().ByzNo {
 			// 	isByz = true
 			// }
-			go initReplica(id, isByz, config.GetConfig().TxInterval)
+			go initReplica(id, isByz)
 		}
 		wg.Wait()
 	} else {
@@ -52,6 +52,6 @@ func main() {
 		if i <= config.GetConfig().ByzNo {
 			isByz = true
 		}
-		initReplica(identity.NodeID(*id), isByz, config.GetConfig().TxInterval)
+		initReplica(identity.NodeID(*id), isByz)
 	}
 }

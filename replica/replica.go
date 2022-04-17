@@ -33,6 +33,7 @@ type Replica struct {
 	timer           *time.Timer // timeout for each view
 	committedBlocks chan *blockchain.Block
 	forkedBlocks    chan *blockchain.Block
+	cleanBlocks     chan *blockchain.Block
 	eventChan       chan interface{}
 	dualEventChan   chan interface{}
 	newViewChan     chan types.NewViewType
@@ -59,12 +60,13 @@ type Replica struct {
 	proposedNo           int
 	processedNo          int
 	committedNo          int
+	activateSignal       chan struct{}
 }
 
 // NewReplica creates a new replica instance
-func NewReplica(id identity.NodeID, alg string, isByz bool, txInterval int) *Replica {
+func NewReplica(id identity.NodeID, alg string, isByz bool) *Replica {
 	r := new(Replica)
-	r.Node = node.NewNode(id, isByz, txInterval,config.GetConfig().PayloadSize)
+	r.Node = node.NewNode(id, isByz)
 	log.Infof("node id: %v consensus algorithm:%v", r.ID(), alg)
 	if isByz {
 		log.Infof("[%v] is Byzantine", r.ID())
@@ -75,7 +77,8 @@ func NewReplica(id identity.NodeID, alg string, isByz bool, txInterval int) *Rep
 		r.Election = election.NewStatic(config.GetConfig().Master)
 	}
 	r.isByz = isByz
-	r.pd = mempool.NewProducer()
+	r.activateSignal = make(chan struct{})
+	r.pd = mempool.NewProducer(id, r.activateSignal)
 	r.pm = pacemaker.NewPacemaker(config.GetConfig().N())
 	r.start = make(chan bool)
 	r.eventChan = make(chan interface{}, 8)
@@ -84,6 +87,7 @@ func NewReplica(id identity.NodeID, alg string, isByz bool, txInterval int) *Rep
 	// r.pause = make(chan struct{})
 	r.committedBlocks = make(chan *blockchain.Block, 100)
 	r.forkedBlocks = make(chan *blockchain.Block, 100)
+	r.cleanBlocks = make(chan *blockchain.Block)
 	r.Register(blockchain.Block{}, r.HandleBlock)
 	r.Register(blockchain.Vote{}, r.HandleVote)
 	r.Register(blockchain.TMO{}, r.HandleTmo)
@@ -97,11 +101,11 @@ func NewReplica(id identity.NodeID, alg string, isByz bool, txInterval int) *Rep
 	// Is there a better way to reduce the number of parameters?
 	switch alg {
 	case "mhotstuff":
-		r.Safety = mhotstuff.NewMHotStuff(r.Node, r.pm, r.Election, r.committedBlocks, r.forkedBlocks, r.eventChan, r.dualEventChan)
+		r.Safety = mhotstuff.NewMHotStuff(r.Node, r.pm, r.Election, r.committedBlocks, r.forkedBlocks, r.cleanBlocks, r.eventChan, r.dualEventChan)
 	case "mthotstuff":
-		r.Safety = mthotstuff.NewMTchs(r.Node, r.pm, r.Election, r.committedBlocks, r.forkedBlocks, r.eventChan, r.dualEventChan)
+		r.Safety = mthotstuff.NewMTchs(r.Node, r.pm, r.Election, r.committedBlocks, r.forkedBlocks, r.cleanBlocks, r.eventChan, r.dualEventChan)
 	default:
-		r.Safety = mhotstuff.NewMHotStuff(r.Node, r.pm, r.Election, r.committedBlocks, r.forkedBlocks, r.eventChan, r.dualEventChan)
+		r.Safety = mhotstuff.NewMHotStuff(r.Node, r.pm, r.Election, r.committedBlocks, r.forkedBlocks, r.cleanBlocks, r.eventChan, r.dualEventChan)
 	}
 	return r
 }
@@ -187,13 +191,19 @@ func (r *Replica) processCommittedBlock(block *blockchain.Block) {
 }
 
 func (r *Replica) processForkedBlock(block *blockchain.Block) {
-	if block.Proposer == r.ID() {
-		for _, txn := range block.Payload {
-			// collect txn back to mem pool
-			r.pd.CollectTxn(txn)
-		}
-	}
+	// if block.Proposer == r.ID() {
+	// 	for _, txn := range block.Payload {
+	// 		// collect txn back to mem pool
+	// 		r.pd.CollectTxn(txn)
+	// 	}
+	// }
 	log.Infof("[%v] the block is forked, No. of transactions: %v, view: %v, seq: %v, current view: %v, id: %x", r.ID(), len(block.Payload), block.View, block.Seq, r.pm.GetCurView(), block.ID)
+}
+
+func (r *Replica) cleanBlock(block *blockchain.Block) {
+	for _, txn := range block.Payload {
+		r.pd.CleanTxn(txn)
+	}
 }
 
 func (r *Replica) processNewView(newView types.NewViewType) {
@@ -253,6 +263,8 @@ func (r *Replica) ListenLocalEvent() {
 func (r *Replica) ListenCommittedBlocks() {
 	for {
 		select {
+		case clean := <-r.cleanBlocks:
+			r.cleanBlock(clean)
 		case committedBlock := <-r.committedBlocks:
 			r.processCommittedBlock(committedBlock)
 		case forkedBlock := <-r.forkedBlocks:
@@ -271,10 +283,24 @@ func (r *Replica) startSignal() {
 	}
 }
 
+func (r *Replica) activate() {
+	<-r.activateSignal
+	r.startSignal()
+	time.Sleep(50 * time.Microsecond)
+	if r.pm.GetCurView() == 0 && r.IsLeader(r.ID(), 1) {
+		log.Debugf("leader %v start to propose ", r.ID())
+		log.Debugf("[%v] is going to kick off the protocol", r.ID())
+		r.pm.AdvanceView(0, 0, types.NoTimeout)
+		r.dualEventChan <- blockchain.Vote{View: 0, Voter: r.ID()}
+	}
+}
+
 // Start starts event loop
 func (r *Replica) Start() {
 	go r.Run()
+	r.pd.Run()
 	// wait for the start signal
+	go r.activate()
 	<-r.start
 	go r.ListenLocalEvent()
 	go r.ListenCommittedBlocks()

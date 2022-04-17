@@ -19,6 +19,7 @@ func init() {
 	gob.Register(ReadReply{})
 	gob.Register(Register{})
 	gob.Register(config.Config{})
+	gob.Register([]*Transaction{})
 }
 
 /***************************
@@ -33,6 +34,12 @@ type Transaction struct {
 	NodeID     identity.NodeID // forward by node
 	ID         string
 	C          chan TransactionReply // reply channel created by request receiver
+}
+type digest []byte
+type Payload struct {
+	ID        string
+	Timestamp time.Time
+	Digest    digest
 }
 
 // TransactionReply replies to current client session

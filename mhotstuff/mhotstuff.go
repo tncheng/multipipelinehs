@@ -33,6 +33,7 @@ type MHotStuff struct {
 	bc              *blockchain.BlockChain
 	committedBlocks chan *blockchain.Block
 	forkedBlocks    chan *blockchain.Block
+	cleanBlocks     chan *blockchain.Block
 	proposeChan     chan types.SignalV
 	selfVote        chan interface{}
 	selfTmo         chan interface{}
@@ -46,7 +47,7 @@ func NewMHotStuff(
 	pm *pacemaker.Pacemaker,
 	elec election.Election,
 	committedBlocks chan *blockchain.Block,
-	forkedBlocks chan *blockchain.Block, selfTmo chan interface{},
+	forkedBlocks chan *blockchain.Block, cleanBlocks chan *blockchain.Block, selfTmo chan interface{},
 	selfVote chan interface{}) *MHotStuff {
 	mhs := new(MHotStuff)
 	mhs.Node = node
@@ -62,6 +63,7 @@ func NewMHotStuff(
 	mhs.highBlock = &blockchain.Block{Seq: 1}
 	mhs.committedBlocks = committedBlocks
 	mhs.forkedBlocks = forkedBlocks
+	mhs.cleanBlocks = cleanBlocks
 	mhs.selfVote = selfVote
 	mhs.selfTmo = selfTmo
 	mhs.proposeChan = make(chan types.SignalV, 4)
@@ -75,17 +77,17 @@ func (mhs *MHotStuff) ProcessBlock(block *blockchain.Block) error {
 	}()
 
 	curView := mhs.pm.GetCurView()
-	if block.Proposer != mhs.ID() {
-		blockIsVerified, _ := crypto.PubVerify(block.Sig, crypto.IDToByte(block.ID), block.Proposer)
-		if !blockIsVerified {
-			log.Warningf("[%v] received a block with an invalid signature", mhs.ID())
-		}
-	}
 	if block.View > curView+1 {
 		//	buffer the block
 		mhs.bufferedBlocks[block.View-1] = block
 		log.Debugf("[%v] the block is buffered, id: %x", mhs.ID(), block.ID)
 		return nil
+	}
+	if block.Proposer != mhs.ID() {
+		blockIsVerified, _ := crypto.PubVerify(block.Sig, crypto.IDToByte(block.ID), block.Proposer)
+		if !blockIsVerified {
+			log.Warningf("[%v] received a block with an invalid signature", mhs.ID())
+		}
 	}
 	if block.QC == nil {
 		return fmt.Errorf("the block should contain a QC")
@@ -126,6 +128,8 @@ func (mhs *MHotStuff) ProcessBlock(block *blockchain.Block) error {
 
 	// update highblock if the block's signature is valid
 	mhs.updateHighBlock(block)
+
+	mhs.cleanBlocks <- block
 
 	// find next leader to collect vote for previous block
 	nextView := curView + 1
@@ -288,7 +292,7 @@ func (mhs *MHotStuff) ProcessLocalTmo(view types.View, seq types.Seq) {
 	// mhs.ProcessRemoteTmo(tmo)
 }
 
-func (mhs *MHotStuff) MakeProposal(view types.NewViewType, payload []*message.Transaction) *blockchain.Block {
+func (mhs *MHotStuff) MakeProposal(view types.NewViewType, payload []*message.Payload) *blockchain.Block {
 	log.Debugf("[%v] make proposal for view:%v", mhs.ID(), view)
 	var qc *blockchain.QC
 	var tc *blockchain.TC

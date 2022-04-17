@@ -20,6 +20,7 @@ var configFile = flag.String("config", "config.json", "Configuration file for mu
 // Config contains every system configuration
 type Config struct {
 	Addrs     map[identity.NodeID]string `json:"address"`      // address for node communication
+	MpAddrs   map[identity.NodeID]string `json:"mpaddress"`    //mempool share channel address
 	HTTPAddrs map[identity.NodeID]string `json:"http_address"` // address for client server communication
 
 	Policy    string  `json:"policy"`    // leader change policy {consecutive, majority}
@@ -39,12 +40,13 @@ type Config struct {
 	MaxRound       int             `json:"maxRound"`
 	Strategy       string          `json:"strategy"`
 	PayloadSize    int             `json:"payload_size"`
+	DeliverSize    int             `json:"deliver_size"`
 	Master         identity.NodeID `json:"master"`
 	Delay          int             `json:"delay"` // transmission delay in ms
 	DErr           int             `json:"derr"`  // the err taken into delays
 	MemSize        int             `json:"memsize"`
-	TxInterval     int             `json:"txinterval"`
-	Duplicate      int             `json:"duplicate"`
+	Rate           int             `json:"rate"`
+	VirtualC       int             `json:"virtual_clients"`
 	Slow           int             `json:"slow"`
 	Crash          int             `json:"crash"`
 
@@ -204,6 +206,9 @@ func (c *Config) Load() {
 		id := identity.NewNodeID(i)
 		port := strconv.Itoa(3734 + i)
 		addr := "tcp://" + scanner.Text() + ":" + port
+		tsPort := strconv.Itoa(4734 + i)
+		tsAddr := "tcp://" + scanner.Text() + ":" + tsPort
+		c.MpAddrs[id] = tsAddr
 		portHttp := strconv.Itoa(8069 + i)
 		addrHttp := "http://" + scanner.Text() + ":" + portHttp
 		c.Addrs[id] = addr

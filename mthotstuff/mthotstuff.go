@@ -29,6 +29,7 @@ type MTchs struct {
 	bc              *blockchain.BlockChain
 	committedBlocks chan *blockchain.Block
 	forkedBlocks    chan *blockchain.Block
+	cleanBlocks     chan *blockchain.Block
 	proposeChan     chan types.SignalV
 	selfVote        chan interface{}
 	selfTmo         chan interface{}
@@ -50,6 +51,7 @@ func NewMTchs(
 	elec election.Election,
 	committedBlocks chan *blockchain.Block,
 	forkedBlocks chan *blockchain.Block,
+	cleanBlocks chan *blockchain.Block,
 	selfTmo chan interface{},
 	selfVote chan interface{}) *MTchs {
 	mth := new(MTchs)
@@ -66,6 +68,7 @@ func NewMTchs(
 	mth.highBlock = &blockchain.Block{Seq: 1}
 	mth.committedBlocks = committedBlocks
 	mth.forkedBlocks = forkedBlocks
+	mth.cleanBlocks = cleanBlocks
 	mth.selfVote = selfVote
 	mth.selfTmo = selfTmo
 	mth.voteType = types.NoTimeout
@@ -79,18 +82,19 @@ func (mth *MTchs) ProcessBlock(block *blockchain.Block) error {
 		log.Debugf("[%v] processing block over, view: %v, Seq: %v, id: %x", mth.ID(), block.View, block.Seq, block.ID)
 	}()
 	curView := mth.pm.GetCurView()
-	if block.Proposer != mth.ID() {
-		blockIsVerified, _ := crypto.PubVerify(block.Sig, crypto.IDToByte(block.ID), block.Proposer)
-		if !blockIsVerified {
-			log.Warningf("[%v] received a block with an invalid signature", mth.ID())
-		}
-	}
 	if block.View > curView+1 {
 		//	buffer the block
 		mth.bufferedBlocks[block.View-1] = block
 		log.Debugf("[%v] the block is buffered, view: %v, current view is: %v, id: %x", mth.ID(), block.View, curView, block.ID)
 		return nil
 	}
+	if block.Proposer != mth.ID() {
+		blockIsVerified, _ := crypto.PubVerify(block.Sig, crypto.IDToByte(block.ID), block.Proposer)
+		if !blockIsVerified {
+			log.Warningf("[%v] received a block with an invalid signature", mth.ID())
+		}
+	}
+
 	if block.QC == nil {
 		return fmt.Errorf("the block should contain a QC")
 	}
@@ -99,6 +103,7 @@ func (mth *MTchs) ProcessBlock(block *blockchain.Block) error {
 		mth.processCertificate(block.QC)
 	}
 
+	mth.cleanBlocks <- block
 	var asCollector bool
 	if block.TC == nil {
 		mth.voteType = types.NoTimeout
@@ -304,7 +309,7 @@ func (mth *MTchs) ProcessLocalTmo(view types.View, seq types.Seq) {
 	mth.selfTmo <- *tmo
 }
 
-func (mth *MTchs) MakeProposal(view types.NewViewType, payload []*message.Transaction) *blockchain.Block {
+func (mth *MTchs) MakeProposal(view types.NewViewType, payload []*message.Payload) *blockchain.Block {
 	log.Debugf("[%v] make proposal for view:%v", mth.ID(), view)
 	var qc *blockchain.QC
 	var tc *blockchain.TC

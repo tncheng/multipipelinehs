@@ -11,6 +11,6 @@ type Safety interface {
 	ProcessVote(vote *blockchain.Vote)
 	ProcessRemoteTmo(tmo *blockchain.TMO)
 	ProcessLocalTmo(view types.View, seq types.Seq)
-	MakeProposal(newView types.NewViewType, payload []*message.Transaction) *blockchain.Block
+	MakeProposal(newView types.NewViewType, payload []*message.Payload) *blockchain.Block
 	GetChainStatus() string
 }
