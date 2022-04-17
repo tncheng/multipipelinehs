@@ -17,7 +17,7 @@ type Block struct {
 	TCs       []*TC
 	Proposer  identity.NodeID
 	Timestamp time.Time
-	Payload   []*message.Transaction
+	Payload   []*message.Payload
 	PrevID    crypto.Identifier
 	Sig       crypto.Signature
 	ID        crypto.Identifier
@@ -35,7 +35,7 @@ type rawBlock struct {
 }
 
 // MakeBlock creates an unsigned block
-func MakeBlock(view types.View, seq types.Seq, qc *QC, tc *TC,tcs []*TC, prevID crypto.Identifier, payload []*message.Transaction, proposer identity.NodeID) *Block {
+func MakeBlock(view types.View, seq types.Seq, qc *QC, tc *TC,tcs []*TC, prevID crypto.Identifier, payload []*message.Payload, proposer identity.NodeID) *Block {
 	b := new(Block)
 	b.View = view
 	b.Seq = seq

@@ -8,40 +8,60 @@ import (
 )
 
 type Backend struct {
+	order         map[string]*list.Element
 	txns          *list.List
 	limit         int
-	duplicate     int
 	totalReceived int64
 	*BloomFilter
 	mu *sync.Mutex
 }
 
-func NewBackend(limit int, duplicate int) *Backend {
+func NewBackend(limit int) *Backend {
 	var mu sync.Mutex
 	return &Backend{
+		order:       make(map[string]*list.Element, limit),
 		txns:        list.New(),
 		BloomFilter: NewBloomFilter(),
 		mu:          &mu,
 		limit:       limit,
-		duplicate:   duplicate,
 	}
 }
 
-func (b *Backend) insertBack(txn *message.Transaction) {
+func (b *Backend) insertBack(txn *message.Transaction) bool {
 	if txn == nil {
+		return false
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.size()+1 > b.limit {
+		return false
+	}
+	b.totalReceived++
+	e := b.txns.PushBack(txn)
+	b.order[txn.ID] = e
+	return true
+}
+
+func (b *Backend) insertNoLimit(tx *message.Transaction) {
+	if tx == nil {
 		return
 	}
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	if b.limit-b.size() < b.duplicate {
+	b.totalReceived++
+	e := b.txns.PushBack(tx)
+	b.order[tx.ID] = e
+}
+
+func (b *Backend) remove(txn *message.Payload) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	e, ok := b.order[txn.ID]
+	if !ok {
 		return
 	}
-
-	for i := 0; i < b.duplicate; i++ {
-		b.totalReceived++
-		b.txns.PushBack(txn)
-	}
-
+	b.txns.Remove(e)
+	delete(b.order, txn.ID)
 }
 
 func (b *Backend) insertFront(txn *message.Transaction) {
@@ -50,7 +70,8 @@ func (b *Backend) insertFront(txn *message.Transaction) {
 	}
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	b.txns.PushFront(txn)
+	e := b.txns.PushFront(txn)
+	b.order[txn.ID] = e
 }
 
 func (b *Backend) size() int {
@@ -67,10 +88,11 @@ func (b *Backend) front() *message.Transaction {
 		return nil
 	}
 	b.txns.Remove(ele)
+	delete(b.order, val.ID)
 	return val
 }
 
-func (b *Backend) some(n int) []*message.Transaction {
+func (b *Backend) some(n int) []*message.Payload {
 	var batchSize int
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -78,10 +100,15 @@ func (b *Backend) some(n int) []*message.Transaction {
 	if batchSize >= n {
 		batchSize = n
 	}
-	batch := make([]*message.Transaction, 0, batchSize)
+	batch := make([]*message.Payload, 0, batchSize)
 	for i := 0; i < batchSize; i++ {
 		tx := b.front()
-		batch = append(batch, tx)
+		txp := &message.Payload{
+			ID:        tx.ID,
+			Digest:    make([]byte, 16),
+			Timestamp: tx.Timestamp,
+		}
+		batch = append(batch, txp)
 	}
 	return batch
 }

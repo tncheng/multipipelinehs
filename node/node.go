@@ -20,7 +20,6 @@ type Node interface {
 	ID() identity.NodeID
 	Run()
 	Retry(r message.Transaction)
-	Forward(id identity.NodeID, r message.Transaction)
 	Register(m interface{}, f interface{})
 	IsByz() bool
 }
@@ -36,8 +35,6 @@ type node struct {
 	handles     map[string]reflect.Value
 	server      *http.Server
 	isByz       bool
-	txInterval  int
-	payloadSize int
 	totalTxn    int
 
 	sync.RWMutex
@@ -45,13 +42,11 @@ type node struct {
 }
 
 // NewNode creates a new Node object from configuration
-func NewNode(id identity.NodeID, isByz bool, txInterval int, payloadSize int) Node {
+func NewNode(id identity.NodeID, isByz bool) Node {
 	return &node{
-		id:          id,
-		isByz:       isByz,
-		txInterval:  txInterval,
-		payloadSize: payloadSize,
-		Socket:      socket.NewSocket(id, config.Configuration.Addrs),
+		id:     id,
+		isByz:  isByz,
+		Socket: socket.NewSocket(id, config.Configuration.Addrs),
 		//Database:    NewDatabase(),
 		MessageChan: make(chan interface{}, config.Configuration.ChanBufferSize),
 		TxChan:      make(chan interface{}, config.Configuration.ChanBufferSize),
@@ -101,7 +96,6 @@ func (n *node) Run() {
 		go n.txn()
 	}
 	// n.http()
-	n.SimulateTx()
 }
 
 func (n *node) txn() {
@@ -156,61 +150,4 @@ func (n *node) handle() {
 		}
 		f.Call([]reflect.Value{v})
 	}
-}
-
-/*
-func (n *node) Forward(id NodeID, m Transaction) {
-	key := m.Command.Key
-	url := config.HTTPAddrs[id] + "/" + strconv.Itoa(int(key))
-
-	log.Debugf("Node %v forwarding %v to %s", n.NodeID(), m, id)
-
-	method := http.MethodGet
-	var body io.Reader
-	if !m.Command.IsRead() {
-		method = http.MethodPut
-		body = bytes.NewBuffer(m.Command.Value)
-	}
-	req, err := http.NewRequest(method, url, body)
-	if err != nil {
-		log.Error(err)
-		return
-	}
-	req.Header.Set(HTTPClientID, string(n.id))
-	req.Header.Set(HTTPCommandID, strconv.Itoa(m.Command.CommandID))
-	res, err := http.DefaultClient.Do(req)
-	if err != nil {
-		log.Error(err)
-		m.TransactionReply(TransactionReply{
-			Command: m.Command,
-			Err:     err,
-		})
-		return
-	}
-	defer res.Body.Close()
-	if res.StatusCode == http.StatusOK {
-		b, err := ioutil.ReadAll(res.Body)
-		if err != nil {
-			log.Error(err)
-		}
-		m.TransactionReply(TransactionReply{
-			Command: m.Command,
-			Value:   Value(b),
-		})
-	} else {
-		m.TransactionReply(TransactionReply{
-			Command: m.Command,
-			Err:     errors.New(res.Status),
-		})
-	}
-}
-*/
-
-func (n *node) Forward(id identity.NodeID, m message.Transaction) {
-	log.Debugf("Node %v forwarding %v to %s", n.ID(), m, id)
-	m.NodeID = n.id
-	n.Lock()
-	n.forwards[m.Command.String()] = &m
-	n.Unlock()
-	n.Send(id, m)
 }
