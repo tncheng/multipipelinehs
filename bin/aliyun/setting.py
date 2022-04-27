@@ -7,7 +7,7 @@ def load_instance_list(file):
     for i in range(size):
         inst={}
         inst['id']=instance_table.iloc[i,0]
-        inst['pub_ip']=instance_table.iloc[i,7]
-        inst['int_ip']=instance_table.iloc[i,8]
+        inst['pub_ip']=instance_table.iloc[i,9].split(';')[1]
+        inst['int_ip']=instance_table.iloc[i,9].split(';')[0]
         instances.append(inst)
     return instances

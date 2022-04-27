@@ -94,7 +94,7 @@ def _prepare(dir,result_dir,int_ips,N):
 
 def _load_instances():
     from aliyun.setting import load_instance_list
-    instances=load_instance_list('ecs_instance_list_cn-zhangjiakou_2022-04-13.csv')
+    instances=load_instance_list('ecs_instance_list.csv')
     pub_ips=[ins['pub_ip'] for ins in instances]
     int_ips=[ins['int_ip'] for ins in instances]
     return pub_ips,int_ips
@@ -112,6 +112,8 @@ def setup(ctx):
         g.run(' && '.join(cmd),hide=True)
     except Exception as e:
         print(f'setup failed on instances, due to: {e}')
+    
+    g.close()
 
 
 @task
@@ -141,7 +143,7 @@ def remote(ctx,N,alg,mode):
     
     # compile
     print("prepare deploy file")
-    run_name=_prepare(source_dir,result_dir,int_ips,N)
+    run_name=_prepare(source_dir,result_dir,pub_ips,N)
     hosts=pub_ips[:N]
 
     work_dir=f'{des_dir}/{source_dir}'
@@ -174,7 +176,7 @@ def remote(ctx,N,alg,mode):
     g.close()
 
     start=time.time()
-    tm=2
+    tm=10
     pss=[]
     for id,ip in enumerate(hosts):
         instance=Process(target=_run,args=(ip,user,id+1,work_dir,start,tm,alg,key_path))
@@ -209,6 +211,7 @@ def remote(ctx,N,alg,mode):
                     conn.get(f'{work_dir}/{f}',f'{result_dir}/{run_name}/{f}')
                     with open(f'{result_dir}/{run_name}/{f}','r') as ref:
                         config=json.load(ref)
+                        print(config['result']['tps(tx/s)'],config['result']['average latency(ms)'],config['result']['rate'])
                         results.append(config['result'])
                         config.pop('result')
                     os.remove(f'{result_dir}/{run_name}/{f}')

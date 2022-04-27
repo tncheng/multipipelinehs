@@ -20,9 +20,10 @@ type Producer struct {
 	virtualC       int
 	payloadSize    int
 	activateSignal chan struct{}
+	isByz          bool
 }
 
-func NewProducer(id identity.NodeID, signal chan struct{}) *Producer {
+func NewProducer(id identity.NodeID, signal chan struct{}, isbyz bool) *Producer {
 	return &Producer{
 		id:             id,
 		mempool:        NewMemPool(),
@@ -31,6 +32,7 @@ func NewProducer(id identity.NodeID, signal chan struct{}) *Producer {
 		virtualC:       config.GetConfig().VirtualC,
 		payloadSize:    config.GetConfig().PayloadSize,
 		activateSignal: signal,
+		isByz:          isbyz,
 	}
 }
 
@@ -42,6 +44,9 @@ func (pd *Producer) Run() {
 func (pd *Producer) recv() {
 	for {
 		m := pd.txShare.RecvTX()
+		if pd.isByz {
+			continue
+		}
 		switch txs := m.(type) {
 		case []*message.Transaction:
 			for _, tx := range txs {
@@ -53,6 +58,9 @@ func (pd *Producer) recv() {
 
 func (pd *Producer) simulateTx() {
 	time.Sleep(10 * time.Second)
+	if pd.isByz {
+		return
+	}
 	base := string(pd.id)
 	count := 0
 	interval := time.Duration((1000000 / pd.rate) * int(time.Microsecond))

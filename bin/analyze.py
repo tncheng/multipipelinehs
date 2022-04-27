@@ -46,13 +46,17 @@ def load_log(work_dir):
     stat['algorithm']=alg[:-1]
     stat['running time(s)']=duration
     stat['txs']=txs
+    if duration==0:
+        duration+=1
     stat['tps(tx/s)']=int(txs/duration)
     stat['average latency(ms)']=mean(latencys)
     stat['replicas']=N
+    stat['blocks']=blocks
     print(json.dumps(stat,indent=2))
-    stat['latencys']=str(latencys)
     with open(f'{work_dir}/config.json','r') as cf:
         config=json.load(cf)
+    stat['rate']=txs/(blocks*config['bsize'])
+    stat['latencys']=str(latencys)
     config['result']=stat
     with open(f'{work_dir}/result_{id}.json','w') as wf:
         json.dump(config,wf,indent=4)

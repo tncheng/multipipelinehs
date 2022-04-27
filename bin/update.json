@@ -1,8 +1,9 @@
 {
-    "bsize": 400,
-    "memsize": 5120,
-    "txinterval": 5,
-    "duplicate": 10,
+    "bsize": 800,
+    "memsize": 10240,
+    "rate": 4200,
+    "virtual_clients": 1,
+    "deliver_size": 512000,
     "byzNo": 0,
-    "payload_size":512
+    "timeout": 5000
 }

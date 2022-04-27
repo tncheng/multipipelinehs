@@ -78,7 +78,7 @@ func NewReplica(id identity.NodeID, alg string, isByz bool) *Replica {
 	}
 	r.isByz = isByz
 	r.activateSignal = make(chan struct{})
-	r.pd = mempool.NewProducer(id, r.activateSignal)
+	r.pd = mempool.NewProducer(id, r.activateSignal, isByz)
 	r.pm = pacemaker.NewPacemaker(config.GetConfig().N())
 	r.start = make(chan bool)
 	r.eventChan = make(chan interface{}, 8)
