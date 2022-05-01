@@ -78,7 +78,7 @@ func NewReplica(id identity.NodeID, alg string, isByz bool) *Replica {
 	}
 	r.isByz = isByz
 	r.activateSignal = make(chan struct{})
-	r.pd = mempool.NewProducer(id, r.activateSignal)
+	r.pd = mempool.NewProducer(id, r.activateSignal, isByz)
 	r.pm = pacemaker.NewPacemaker(config.GetConfig().N())
 	r.start = make(chan bool)
 	r.eventChan = make(chan interface{}, 8)
@@ -187,7 +187,7 @@ func (r *Replica) processCommittedBlock(block *blockchain.Block) {
 	}
 	r.committedNo++
 	r.totalCommittedTx += len(block.Payload)
-	log.Infof("[%v] the block is committed, No. of transactions: %v, view: %v, seq: %v, current view: %v, id: %x", r.ID(), len(block.Payload), block.View, block.Seq, r.pm.GetCurView(), block.ID)
+	log.Infof("[%v] the block is committed, No. of transactions: %v, view: %v, seq: %v, current view: %v, id: %x,%v", r.ID(), len(block.Payload), block.View, block.Seq, r.pm.GetCurView(), block.ID, block.Proposer)
 }
 
 func (r *Replica) processForkedBlock(block *blockchain.Block) {

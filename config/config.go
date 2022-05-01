@@ -41,6 +41,7 @@ type Config struct {
 	Strategy       string          `json:"strategy"`
 	PayloadSize    int             `json:"payload_size"`
 	DeliverSize    int             `json:"deliver_size"`
+	ShareInterval  int             `json:"share_interval"`
 	Master         identity.NodeID `json:"master"`
 	Delay          int             `json:"delay"` // transmission delay in ms
 	DErr           int             `json:"derr"`  // the err taken into delays
