@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-N=4
+N=34
 
 SERVER_PID_FILE=server.pid
 

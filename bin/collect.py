@@ -4,32 +4,43 @@ import os
 from matplotlib.pyplot import flag, table
 import pandas as pd
 
-from numpy import append
-from numpy import mean
-from numpy import var
+from numpy import mean,std,median
 import json
 
-result_dir='result-mthotstuff'
+result_dir='result'
 
 data_tps={}
 data_latency={}
 max=0
+table=[]
+need_config=["rate","virtual_clients","byzNo"]
 for f in os.listdir(result_dir):
-    if '.xls' in f:
-        continue
     for re in os.listdir(f'{result_dir}/{f}'):
         if '.json' in re:
             with open(f'{result_dir}/{f}/{re}','r') as rj:
                 result=json.load(rj)
                 tpss=[]
                 latencys=[]
+                tx_rates=[]
+                committx=[]
+                forkedtx=[]
+                abnormal=False
                 
                 for rn in result['result']:
                     if not rn:
                         continue
                     tpss.append(rn['tps(tx/s)'])
+                    committx.append(rn['txs'])
+                    forkedtx.append(rn['forkedtxs'])
+                    try:
+                        tx_rates.append(rn['tx_rate'])
+                    except Exception as e:
+                        print(f'error on {f}',e)
+                        tx_rates.append(0)
+                    if rn['latencys'] == '[]':
+                        abnormal=True
+                        continue
                     for la in rn['latencys'][1:-1].split(', '):
-
                         if la =='':
                             continue
                         latencys.append(float(la))
@@ -37,15 +48,19 @@ for f in os.listdir(result_dir):
                 if len(latencys)>max:
                     max=len(latencys)
                 data_tps[len(result['result'])]=mean(tpss)
-                data_latency[len(result['result'])]=latencys
-                print(result['result'][0]['replicas'],mean(tpss)/1000,mean(latencys))
-1/0
-print(max)
-for k,v in data_latency.items():
-    data_latency[k]=data_latency[k]+[0 for _ in range(max-len(data_latency[k]))]
-    print(len(data_latency[k]))
+                data_latency[len(result['result'])]=mean(latencys)
+                mat="{:8}\t{:8}\t{:8}\t{:<16}\t{:<16}\t{:<16}\t{:<16}"
 
-table_tps=pd.DataFrame(data_tps,index=[0])
-table_latency=pd.DataFrame(data_latency)
-table_tps.to_excel(f'{result_dir}/tps.xls')
-table_latency.to_excel(f'{result_dir}/latency.xls')
+                try:
+                    record=[result['result'][0]['replicas'],abnormal,mean(tx_rates)]+[result[co] for co in need_config]+[median(tpss)/1000,median(committx),median(forkedtx),median(latencys),mean(latencys),std(latencys)]
+                    table.append(record)
+                    # print(mat.format( result['result'][0]['replicas'],result['rate'],result['virtual_clients'],mean(tpss)/1000,median(latencys),mean(latencys),std(latencys)))
+                except Exception as e:
+                    print(f'error on {f}',e)
+                
+                
+    # print(data_tps)
+    # print(data_latency)
+print(len(table))
+tableframe=pd.DataFrame(table)
+tableframe.to_excel(f'tps_latency.xls',header=None)

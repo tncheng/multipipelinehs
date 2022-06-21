@@ -1,4 +1,3 @@
-
 import time
 
 import json
@@ -6,7 +5,7 @@ import json
 from numpy import nan_to_num
 from numpy import mean
 
-def update_config(dir):
+def UpdateConfig(dir):
     with open("update.json",'r') as uc:
         config=json.load(uc)
     with open("config.json",'r') as oc:
@@ -18,17 +17,29 @@ def update_config(dir):
         json.dump(origin_config,wf,indent=4)
 
 
-def generate_ip_table(int_ips,mode,N):
+def GenerateIPTable(ip_ports,mode,N):
     if mode=='remote':
+        ips=[]
+        ports=[]
+        phy_nodes=len(ip_ports)
+        
+        for k,v in reversed(ip_ports.items()):
+            ips.append(k)
+            ports.append(v)
+        
         ip_tables=[]
-        if N>len(int_ips):
-            raise Exception(f'size of instances error, {N},{len(int_ips)}')
-        ip_tables=[f'{ip}\n' for ip in int_ips[:N]]
+        nodes=[]
+        for i in range(N):
+            ip_tables.append(f'{ips[i%(phy_nodes)]}\n')
+            nodes.append(ports[i%phy_nodes])
+        
         with open("ips.txt",'w') as wf:
             wf.writelines(ip_tables)
+        return nodes
     else:
         with open("ips.txt",'w') as wf:
             wf.writelines([f'127.0.0.1\n' for _ in range(N)])
+        return None
         
 
 
@@ -36,8 +47,9 @@ def generate_ip_table(int_ips,mode,N):
         
 
 
-def Analyze(config_dir,result_dir,log,N):
+def Analyze(result_dir,log,N,bsize):
     txs=0
+    forkedtxs=0
     fp=open("{}/{}".format(result_dir, log))
     timelist=[]
     latencys=[]
@@ -58,6 +70,8 @@ def Analyze(config_dir,result_dir,log,N):
             if int(commitedtx)==0:
                 continue
             blocks+=1
+        if "forked" in line:
+            forkedtxs+=int(line.split(':')[5][:-6])
         if "latency" in line:
             latencys.append(nan_to_num(float(line.split(' ')[-2])))
     if len(timelist)<1:
@@ -68,9 +82,15 @@ def Analyze(config_dir,result_dir,log,N):
     stat['algorithm']=alg[:-1]
     stat['running time(s)']=duration
     stat['txs']=txs
+    stat['forkedtxs']=forkedtxs
+    stat['forked rate']=forkedtxs/(forkedtxs+txs)
+    if duration == 0:
+        duration+=1
     stat['tps(tx/s)']=int(txs/duration)
-    stat['average latency(ms)']=mean(latencys)
+    stat['average latency(ms)']= mean(latencys)
     stat['replicas']=N
+    stat['blocks']=blocks
+    stat['tx_rate']=txs/(blocks*bsize)
     print(json.dumps( stat,indent=2))
     stat['latencys']=str(latencys)
     return stat
